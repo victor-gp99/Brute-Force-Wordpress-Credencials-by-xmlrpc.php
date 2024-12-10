@@ -23,13 +23,14 @@ This script performs a brute force attack via XML-RPC on WordPress.
 3. Run the script with the necessary parameters:
 
     ```sh
-    ./xmlrpc_bf.sh -u <username> -w <wordlist>
+    ./xmlrpc_bf.sh -u <username> -w <wordlist> -i <ip>
     ```
 
     - `-u <username>`: Username you want to brute force.
     - `-w <wordlist>`: Path to the password list file to be used for the attack.
+    - `-i <ip>`: host to attack
 
 ## Example
 
 ```sh
-./xmlrpc_bf.sh -u admin -w /path/to/wordlist.txt
+./xmlrpc_bf.sh -u admin -w /path/to/wordlist.txt -i 127.0.0.1
