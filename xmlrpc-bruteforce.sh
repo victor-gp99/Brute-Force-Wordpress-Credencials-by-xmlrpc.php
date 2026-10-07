@@ -44,12 +44,27 @@ function helpPanel() {
     echo -e "\t-L: Archivo con lista de usuarios (uno por linea)."
     echo -e "\t-w: Diccionario de contraseñas."
     echo -e "\t-i: IP o host objetivo."
-    echo -e "\t-U: URL completa del xmlrpc (opcional). Por defecto http://<ip>/wordpress/xmlrpc.php"
+    echo -e "\t-U: URL completa del xmlrpc (opcional). Por defecto http://<ip>/xmlrpc.php"
     echo -e "\t-d: Retardo en segundos entre intentos (opcional, por defecto 0)."
     echo -e "\t-r: Reintentos ante error de red por intento (opcional, por defecto 2)."
     echo -e "\t-s: Modo spray (una contraseña contra todos los usuarios antes de pasar a la siguiente)."
     echo -e "\t    Reduce bloqueos por cuenta frente al modo fuerza bruta por defecto.\n"
     exit 1
+}
+
+# Valida que el objetivo sea una IPv4 con octetos 0-255 o un hostname valido.
+function validate_target() {
+    local t=$1
+    # Si parece IPv4, valida que cada octeto este en 0-255
+    if echo "$t" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+        local IFS='.'; read -ra oct <<< "$t"
+        for o in "${oct[@]}"; do
+            [ "$o" -gt 255 ] 2>/dev/null && return 1
+        done
+        return 0
+    fi
+    # Si no, acepta hostname valido
+    echo "$t" | grep -qE '^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$'
 }
 
 # Devuelve por stdout el estado del intento:
@@ -193,7 +208,7 @@ function run_spray() {
 tput civis
 
 spray=0
-while getopts "u:L:w:i:U:d:r:sh" opt; do
+while getopts ":u:L:w:i:U:d:r:sh" opt; do
     case $opt in
         u) username=$OPTARG ;;
         L) userlist=$OPTARG ;;
@@ -204,9 +219,18 @@ while getopts "u:L:w:i:U:d:r:sh" opt; do
         r) retries=$OPTARG ;;
         s) spray=1 ;;
         h) helpPanel ;;
-        \?) echo "Opcion invalida: $OPTARG" 1>&2; exit 1 ;;
+        :)  echo -e "\n${redColour}[-] La opcion -$OPTARG requiere un argumento.${endColour}" 1>&2; helpPanel ;;
+        \?) echo -e "\n${redColour}[-] Opcion invalida: -$OPTARG${endColour}" 1>&2; helpPanel ;;
     esac
 done
+
+# Descarta las opciones ya parseadas; si sobra algo, hubo un error de flags.
+shift $((OPTIND - 1))
+if [ "$#" -gt 0 ]; then
+    echo -e "\n${redColour}[-] Argumento(s) no reconocido(s): $*${endColour}"
+    echo -e "${yellowColour}[!] La IP va con -i, no -ip. Usar -ip hace que getopts lea -i con valor 'p'.${endColour}"
+    helpPanel
+fi
 
 delay=${delay:-0}
 retries=${retries:-2}
@@ -220,7 +244,12 @@ if { [ -z "$username" ] && [ -z "$userlist" ]; } || [ -z "$wordlist" ] || { [ -z
     helpPanel
 fi
 
-[ -z "$url" ] && url="http://$ip/wordpress/xmlrpc.php"
+# Valida el formato del objetivo solo si se paso -i (no si se uso -U directo)
+if [ -n "$ip" ] && ! validate_target "$ip"; then
+    echo -e "\n${redColour}[-] IP u host con formato invalido: '$ip'${endColour}\n"; exit 1
+fi
+
+[ -z "$url" ] && url="http://$ip/xmlrpc.php"
 
 if [ ! -f "$wordlist" ]; then
     echo -e "\n${redColour}[-] No se encontro el diccionario: $wordlist${endColour}\n"; exit 1
