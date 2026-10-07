@@ -56,6 +56,19 @@ function helpPanel() {
     exit 1
 }
 
+# Valida que el objetivo sea una IPv4 con octetos 0-255 o un hostname valido.
+function validate_target() {
+    local t=$1
+    if echo "$t" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+        local IFS='.'; read -ra oct <<< "$t"
+        for o in "${oct[@]}"; do
+            [ "$o" -gt 255 ] 2>/dev/null && return 1
+        done
+        return 0
+    fi
+    echo "$t" | grep -qE '^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$'
+}
+
 # Escapa los caracteres XML obligatorios. El orden importa: & primero.
 function xml_escape() {
     local s=$1
@@ -166,7 +179,7 @@ function flush_batch() {
     # Respuesta que no es XML-RPC: WAF, 403/404, HTML. No tiene caso seguir.
     if [ "$HTTP_CODE" != "200" ] || ! echo "$RESP_BODY" | grep -q "methodResponse"; then
         printf "\n"
-        echo -e "    ${redColour}[-] Respuesta no-XMLRPC (HTTP $HTTP_CODE). Posible WAF o xmlrpc bloqueado. Abortando.${endColour}"
+        echo -e "    ${redColour}[-] Respuesta no-XMLRPC (HTTP $HTTP_CODE). Posible WAF, path erroneo o xmlrpc bloqueado. Abortando.${endColour}"
         return 2
     fi
 
@@ -226,7 +239,7 @@ function run() {
 
 tput civis
 
-while getopts "u:L:w:i:U:b:d:r:h" opt; do
+while getopts ":u:L:w:i:U:b:d:r:h" opt; do
     case $opt in
         u) username=$OPTARG ;;
         L) userlist=$OPTARG ;;
@@ -237,9 +250,18 @@ while getopts "u:L:w:i:U:b:d:r:h" opt; do
         d) delay=$OPTARG ;;
         r) retries=$OPTARG ;;
         h) helpPanel ;;
-        \?) echo "Opcion invalida: $OPTARG" 1>&2; exit 1 ;;
+        :)  echo -e "\n${redColour}[-] La opcion -$OPTARG requiere un argumento.${endColour}" 1>&2; helpPanel ;;
+        \?) echo -e "\n${redColour}[-] Opcion invalida: -$OPTARG${endColour}" 1>&2; helpPanel ;;
     esac
 done
+
+# Descarta las opciones ya parseadas; si sobra algo, hubo un error de flags.
+shift $((OPTIND - 1))
+if [ "$#" -gt 0 ]; then
+    echo -e "\n${redColour}[-] Argumento(s) no reconocido(s): $*${endColour}"
+    echo -e "${yellowColour}[!] La IP va con -i, no -ip. Usar -ip hace que getopts lea -i con valor 'p'.${endColour}"
+    helpPanel
+fi
 
 batchsize=${batchsize:-100}
 delay=${delay:-0}
@@ -255,6 +277,11 @@ fi
 
 if { [ -z "$username" ] && [ -z "$userlist" ]; } || [ -z "$wordlist" ] || { [ -z "$ip" ] && [ -z "$url" ]; }; then
     helpPanel
+fi
+
+# Valida el formato del objetivo solo si se paso -i (no si se uso -U directo)
+if [ -n "$ip" ] && ! validate_target "$ip"; then
+    echo -e "\n${redColour}[-] IP u host con formato invalido: '$ip'${endColour}\n"; exit 1
 fi
 
 [ -z "$url" ] && url="http://$ip/wordpress/xmlrpc.php"
